@@ -27,9 +27,8 @@ that.
 
 ## Tech stack
 
-Next.js (App Router) + TypeScript + Tailwind CSS, Prisma ORM with SQLite for
-local development, and the Web Push API (`web-push` + VAPID) for
-notifications.
+Next.js (App Router) + TypeScript + Tailwind CSS, Prisma ORM with Postgres,
+and the Web Push API (`web-push` + VAPID) for notifications.
 
 ## Local development
 
@@ -39,12 +38,17 @@ notifications.
    npm install
    ```
 
-2. Copy the example environment file and fill it in:
+2. Have a Postgres database available (a local install, or a free hosted one
+   from [Neon](https://neon.tech) or [Supabase](https://supabase.com) works
+   fine for local dev too).
+
+3. Copy the example environment file and fill it in:
 
    ```bash
    cp .env.example .env
    ```
 
+   - `DATABASE_URL` — your Postgres connection string.
    - `APP_PASSCODE` — the passcode you'll type in to log in.
    - `SESSION_SECRET` — random string, e.g. `openssl rand -hex 32`.
    - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — generate with
@@ -53,13 +57,13 @@ notifications.
    - `VAPID_SUBJECT` — a `mailto:` address, required by the Web Push spec.
    - `CRON_SECRET` — random string that protects the follow-up-check endpoint.
 
-3. Create the local SQLite database:
+4. Apply the database schema:
 
    ```bash
    npx prisma migrate dev
    ```
 
-4. Run the dev server:
+5. Run the dev server:
 
    ```bash
    npm run dev
@@ -91,61 +95,59 @@ route requires either:
 and it sends one push notification per subscribed browser listing everyone
 currently overdue.
 
-## Deploying
+## Deploying to Vercel
 
-### Recommended: Vercel + a hosted Postgres database
+1. **Push this repo to GitHub** (already done if you're reading this from the
+   repo). Note which branch you want deployed.
 
-SQLite is great for local dev, but Vercel's filesystem is read-only/ephemeral
-in production, so the database needs to live somewhere else. The Vercel +
-Postgres combo also gets you Vercel Cron for free, which is what triggers the
-follow-up push notifications.
+2. **Go to [vercel.com/new](https://vercel.com/new)**, sign in (GitHub login
+   is easiest), and import this repository. If it asks which branch to use
+   as production, pick the branch with this app on it.
 
-1. **Switch the database provider.** In `prisma/schema.prisma`, change:
+3. **Add a Postgres database.** In the same import flow (or afterwards, from
+   the project's **Storage** tab), add a Postgres database — Vercel offers
+   one built in (Neon-backed), or you can paste in a connection string from
+   [Neon](https://neon.tech) or [Supabase](https://supabase.com) instead.
+   Either way, this sets the `DATABASE_URL` environment variable for you (or
+   you set it yourself if using an external provider).
 
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
+4. **Set the remaining environment variables** in the project's
+   **Settings → Environment Variables**: `APP_PASSCODE`, `SESSION_SECRET`,
+   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+   `VAPID_SUBJECT`, and `CRON_SECRET`. Generate fresh values — don't reuse the
+   placeholder ones from `.env.example`. (`npx web-push generate-vapid-keys`
+   locally gives you the VAPID pair; `openssl rand -hex 32` works for the
+   secrets.)
+
+5. **Deploy.** Vercel runs `npm install` (which runs `prisma generate` via
+   the `postinstall` script) and then `npm run build`. After the first
+   deploy succeeds, run the migration against the production database once:
+
+   ```bash
+   DATABASE_URL="<your production connection string>" npx prisma migrate deploy
    ```
 
-   Then delete `prisma/migrations` and run `npx prisma migrate dev --name init`
-   again locally against a Postgres URL (e.g. from
-   [Neon](https://neon.tech), [Supabase](https://supabase.com), or Vercel's
-   own Postgres add-on — all have free tiers) to regenerate the migration
-   for Postgres.
+   (Run this from your own machine, with the production `DATABASE_URL` from
+   the Vercel dashboard — it only needs to be run once, and again after any
+   future schema change.)
 
-2. **Push this repo to GitHub** and import it into Vercel.
-
-3. **Set environment variables** in the Vercel project settings: `DATABASE_URL`
-   (your Postgres connection string), `APP_PASSCODE`, `SESSION_SECRET`,
-   `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
-   `VAPID_SUBJECT`, and `CRON_SECRET`. Generate fresh values for the secrets
-   rather than reusing the local dev ones in `.env.example`.
-
-4. **Vercel Cron is already configured** in `vercel.json` to hit
+6. **Vercel Cron is already configured** in `vercel.json` to hit
    `/api/cron/check-followups` daily at 13:00 UTC (~9am Eastern). Vercel
    automatically sends `Authorization: Bearer $CRON_SECRET` on cron requests
    when a `CRON_SECRET` env var is set, so no extra wiring is needed. Adjust
-   the schedule or add more times in `vercel.json` if you want more frequent
-   checks.
+   the schedule in `vercel.json` if you want a different time or frequency.
 
-5. Deploy. Vercel runs `prisma generate` automatically via the `postinstall`
-   script, and applies migrations if you add
-   `npx prisma migrate deploy && next build` as the build command (or run
-   `npm run db:migrate:deploy` manually against the production `DATABASE_URL`
-   after your first deploy).
+Once deployed, Vercel gives you a URL like `your-project.vercel.app` — that's
+what you (and anyone else logging in with the passcode) use to reach the app.
 
-### Alternative: self-host with SQLite
+### Alternative: self-host on your own server
 
-If you'd rather run this on a small always-on server or VM (so you don't have
-to switch off SQLite), you can skip the Postgres migration above. You'll need:
-
-- A process manager (`pm2`, `systemd`, Docker, etc.) running `npm run build`
-  then `npm start`, with a persistent volume for `prisma/dev.db`.
-- Your own cron (a `cron` entry, or a tool like `cron-job.org` if the server
-  is reachable over the internet) hitting
-  `https://your-domain/api/cron/check-followups?secret=<CRON_SECRET>` daily.
+If you'd rather not use Vercel, any Node host works: run `npm run build` then
+`npm start` behind a process manager (`pm2`, `systemd`, Docker), point
+`DATABASE_URL` at any reachable Postgres instance, and set up your own cron
+(a `cron` entry, or `cron-job.org` if the server is internet-reachable)
+hitting `https://your-domain/api/cron/check-followups?secret=<CRON_SECRET>`
+daily.
 
 ## Enabling push notifications (after deploying)
 
