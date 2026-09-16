@@ -21,11 +21,10 @@ that.
   dashboard. You can also set a custom next-follow-up date per prospect.
 - **Push notifications**: opt in from Settings and a scheduled job will send
   a browser push notification listing anyone overdue for a follow-up.
-- **Single-user passcode login**: no accounts to manage — just a shared
-  passcode, since this is meant for one person (or a small team sharing one
-  passcode) to run the pipeline. The passcode starts out as the
-  `APP_PASSCODE` environment variable; once you change it from **Settings**,
-  the new one is stored (hashed) in the database and takes over.
+- **Optional passcode login**: the app has no login at all out of the box —
+  anyone with the link can use it. If you want to require a passcode, turn
+  it on from **Settings**; it's stored (hashed) in the database, so there's
+  no environment variable to configure or redeploy.
 
 ## Tech stack
 
@@ -51,8 +50,8 @@ and the Web Push API (`web-push` + VAPID) for notifications.
    ```
 
    - `DATABASE_URL` — your Postgres connection string.
-   - `APP_PASSCODE` — the passcode you'll type in to log in.
-   - `SESSION_SECRET` — random string, e.g. `openssl rand -hex 32`.
+   - `SESSION_SECRET` — random string, e.g. `openssl rand -hex 32` (used to
+     sign the login session cookie, only relevant once you enable a passcode).
    - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — generate with
      `npx web-push generate-vapid-keys`. Also copy the public key into
      `NEXT_PUBLIC_VAPID_PUBLIC_KEY` (same value, just exposed to the browser).
@@ -71,8 +70,8 @@ and the Web Push API (`web-push` + VAPID) for notifications.
    npm run dev
    ```
 
-   Open http://localhost:3000, log in with your `APP_PASSCODE`, and start
-   adding prospects.
+   Open http://localhost:3000 and start adding prospects — no login is
+   required until you turn one on from Settings.
 
 ## How follow-up reminders work
 
@@ -114,7 +113,7 @@ currently overdue.
    you set it yourself if using an external provider).
 
 4. **Set the remaining environment variables** in the project's
-   **Settings → Environment Variables**: `APP_PASSCODE`, `SESSION_SECRET`,
+   **Settings → Environment Variables**: `SESSION_SECRET`,
    `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
    `VAPID_SUBJECT`, and `CRON_SECRET`. Generate fresh values — don't reuse the
    placeholder ones from `.env.example`. (`npx web-push generate-vapid-keys`
@@ -139,8 +138,9 @@ currently overdue.
    when a `CRON_SECRET` env var is set, so no extra wiring is needed. Adjust
    the schedule in `vercel.json` if you want a different time or frequency.
 
-Once deployed, Vercel gives you a URL like `your-project.vercel.app` — that's
-what you (and anyone else logging in with the passcode) use to reach the app.
+Once deployed, Vercel gives you a URL like `your-project.vercel.app`. Anyone
+with that link can open the app right away — set a passcode from Settings
+once you're ready to lock it down (see below).
 
 ### Alternative: self-host on your own server
 
@@ -160,23 +160,26 @@ daily.
 Notifications only work over HTTPS (or `localhost`), so this step won't work
 until the app is deployed with a real domain (or tested locally).
 
-## Changing the login passcode
+## Login (off by default)
 
-Go to **Settings → Change login passcode**, enter the current passcode and a
-new one, and save. This is the recommended way to change it — it's stored
-(hashed) in the database, so it takes effect immediately with no redeploy.
+There is no environment variable for the passcode — the app simply has no
+login until you turn one on, entirely from the running app itself:
 
-If you'd rather set it via the `APP_PASSCODE` environment variable in Vercel
-instead: that only works as a *bootstrap* value, before anyone has ever
-changed the passcode from Settings. Once a passcode has been set in the app,
-`APP_PASSCODE` is ignored. Also note that editing `APP_PASSCODE` in Vercel's
-dashboard requires a redeploy to take effect, and a stray trailing space or
-newline from pasting the value in will make an otherwise-correct passcode
-fail (the in-app Settings form doesn't have this problem).
+- **Turn on login**: go to **Settings**, enter a new passcode (twice, to
+  confirm), and save. From that point on, opening the app requires it.
+- **Change the passcode**: same place — enter the current passcode and a new
+  one.
+- **Turn login off again**: enter the current passcode and click "Turn off
+  login." The app goes back to being open to anyone with the link.
+
+All of this is stored (hashed) in the database and takes effect immediately
+— no environment variables, no redeploying, nothing to get out of sync with
+a hosting dashboard.
 
 Existing logged-in sessions on other devices/browsers aren't forced out when
 you change the passcode — they stay valid until they naturally expire (30
-days) or you clear cookies.
+days) or you clear cookies. Turning login off makes that moot, since nothing
+is checked at all while it's off.
 
 ## Known limitations / things to revisit
 

@@ -1,8 +1,13 @@
 import AppHeader from "@/components/AppHeader";
 import NotificationSetup from "@/components/NotificationSetup";
-import ChangePasscodeForm from "@/components/ChangePasscodeForm";
+import PasscodeSettings from "@/components/PasscodeSettings";
+import { isLoginRequired } from "@/lib/auth";
 
-export default function SettingsPage() {
+export const dynamic = "force-dynamic";
+
+export default async function SettingsPage() {
+  const loginEnabled = await isLoginRequired();
+
   return (
     <div className="min-h-screen bg-slate-50">
       <AppHeader />
@@ -14,15 +19,8 @@ export default function SettingsPage() {
         <div className="mt-6">
           <NotificationSetup />
         </div>
-        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4">
-          <h3 className="text-sm font-semibold text-slate-900">Change login passcode</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Updates the passcode everyone uses to log in. Existing sessions on other
-            devices stay logged in until they expire.
-          </p>
-          <div className="mt-3">
-            <ChangePasscodeForm />
-          </div>
+        <div className="mt-6">
+          <PasscodeSettings initialEnabled={loginEnabled} />
         </div>
       </main>
     </div>

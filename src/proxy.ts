@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SESSION_COOKIE, isValidSessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, isLoginRequired, isValidSessionToken } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login"];
 
@@ -7,13 +7,25 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   if (
-    PUBLIC_PATHS.includes(pathname) ||
     pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/_next") ||
     pathname === "/sw.js" ||
     pathname === "/manifest.json" ||
     pathname === "/favicon.ico"
   ) {
+    return NextResponse.next();
+  }
+
+  // No passcode has been set from Settings yet, so the app is open to
+  // anyone with the link. There's nothing to check a session cookie against.
+  if (!(await isLoginRequired())) {
+    if (pathname === "/login") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  if (PUBLIC_PATHS.includes(pathname)) {
     return NextResponse.next();
   }
 

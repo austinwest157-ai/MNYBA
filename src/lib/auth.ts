@@ -76,23 +76,20 @@ function verifyPasscodeHash(passcode: string, stored: string): boolean {
 }
 
 /**
- * Checks a passcode against whatever the current login secret is: a
- * database-stored (hashed) passcode once one has been set via Settings, or
- * else the APP_PASSCODE env var as a bootstrap default. Both sides are
- * trimmed so a stray trailing space/newline from pasting the env var into a
- * hosting dashboard doesn't silently lock out an otherwise-correct passcode.
+ * The app has no login at all until a passcode is set from Settings. Once
+ * one exists in the database, that's the sole source of truth — there is no
+ * environment-variable fallback, so there's nothing to get out of sync with
+ * a hosting dashboard.
  */
-export async function verifyPasscode(candidate: string): Promise<boolean> {
-  const trimmedCandidate = candidate.trim();
-
+export async function isLoginRequired(): Promise<boolean> {
   const settings = await prisma.appSettings.findUnique({ where: { id: APP_SETTINGS_ID } });
-  if (settings?.passcodeHash) {
-    return verifyPasscodeHash(trimmedCandidate, settings.passcodeHash);
-  }
+  return Boolean(settings?.passcodeHash);
+}
 
-  const expected = process.env.APP_PASSCODE?.trim();
-  if (!expected) throw new Error("APP_PASSCODE is not set");
-  return timingSafeEqualStr(trimmedCandidate, expected);
+export async function verifyPasscode(candidate: string): Promise<boolean> {
+  const settings = await prisma.appSettings.findUnique({ where: { id: APP_SETTINGS_ID } });
+  if (!settings?.passcodeHash) return false;
+  return verifyPasscodeHash(candidate.trim(), settings.passcodeHash);
 }
 
 export async function setPasscode(newPasscode: string): Promise<void> {
@@ -101,6 +98,14 @@ export async function setPasscode(newPasscode: string): Promise<void> {
     where: { id: APP_SETTINGS_ID },
     update: { passcodeHash },
     create: { id: APP_SETTINGS_ID, passcodeHash },
+  });
+}
+
+export async function clearPasscode(): Promise<void> {
+  await prisma.appSettings.upsert({
+    where: { id: APP_SETTINGS_ID },
+    update: { passcodeHash: null },
+    create: { id: APP_SETTINGS_ID, passcodeHash: null },
   });
 }
 
