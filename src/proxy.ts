@@ -18,7 +18,21 @@ export async function proxy(req: NextRequest) {
 
   // No passcode has been set from Settings yet, so the app is open to
   // anyone with the link. There's nothing to check a session cookie against.
-  if (!(await isLoginRequired())) {
+  //
+  // This check itself needs the database, so if the database is
+  // unreachable or not migrated yet, fail OPEN rather than turning every
+  // single page into a 500. Being unexpectedly open for a moment is a much
+  // smaller problem for this internal tool than the whole app going down
+  // over what is, at worst, an auth convenience feature.
+  let loginRequired: boolean;
+  try {
+    loginRequired = await isLoginRequired();
+  } catch (err) {
+    console.error("Failed to check login requirement, letting request through:", err);
+    loginRequired = false;
+  }
+
+  if (!loginRequired) {
     if (pathname === "/login") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
