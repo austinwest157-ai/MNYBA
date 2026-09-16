@@ -23,7 +23,9 @@ that.
   a browser push notification listing anyone overdue for a follow-up.
 - **Single-user passcode login**: no accounts to manage — just a shared
   passcode, since this is meant for one person (or a small team sharing one
-  passcode) to run the pipeline.
+  passcode) to run the pipeline. The passcode starts out as the
+  `APP_PASSCODE` environment variable; once you change it from **Settings**,
+  the new one is stored (hashed) in the database and takes over.
 
 ## Tech stack
 
@@ -157,6 +159,24 @@ daily.
 
 Notifications only work over HTTPS (or `localhost`), so this step won't work
 until the app is deployed with a real domain (or tested locally).
+
+## Changing the login passcode
+
+Go to **Settings → Change login passcode**, enter the current passcode and a
+new one, and save. This is the recommended way to change it — it's stored
+(hashed) in the database, so it takes effect immediately with no redeploy.
+
+If you'd rather set it via the `APP_PASSCODE` environment variable in Vercel
+instead: that only works as a *bootstrap* value, before anyone has ever
+changed the passcode from Settings. Once a passcode has been set in the app,
+`APP_PASSCODE` is ignored. Also note that editing `APP_PASSCODE` in Vercel's
+dashboard requires a redeploy to take effect, and a stray trailing space or
+newline from pasting the value in will make an otherwise-correct passcode
+fail (the in-app Settings form doesn't have this problem).
+
+Existing logged-in sessions on other devices/browsers aren't forced out when
+you change the passcode — they stay valid until they naturally expire (30
+days) or you clear cookies.
 
 ## Known limitations / things to revisit
 

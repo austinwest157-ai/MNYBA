@@ -58,3 +58,11 @@ model PushSubscription {
   auth      String
   createdAt DateTime @default(now())
 }
+
+// Singleton row (always id = 1) holding the login passcode once it's been
+// changed from the app. Falls back to the APP_PASSCODE env var until then.
+model AppSettings {
+  id           Int      @id @default(1)
+  passcodeHash String?
+  updatedAt    DateTime @updatedAt
+}
